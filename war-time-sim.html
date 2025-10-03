@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Conquest Simulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for a cleaner UI */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117;
+            color: #c9d1d9;
+        }
+        .profile-img {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 50%;
+            border: 3px solid #3b82f6;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+        }
+        .scrollable-list {
+            max-height: 250px;
+            overflow-y: auto;
+            border-radius: 8px;
+            border: 1px solid #21262d;
+            background-color: #0d1117;
+        }
+        .battle-log-height {
+            max-height: 400px; /* Increased height for better log view */
+        }
+    </style>
+    <script>
+        // Placeholder Firebase configuration (not used for storage, but included for completeness)
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+    </script>
+</head>
+<body class="p-4 sm:p-8">
+
+    <div id="app" class="max-w-7xl mx-auto bg-[#161b22] rounded-xl shadow-2xl border border-gray-700 p-6 sm:p-8">
+        <h1 class="text-4xl font-extrabold text-red-500 mb-6 text-center border-b border-gray-700 pb-3">
+            Global Conquest Simulation
+        </h1>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- LEFT COLUMN: Profile Management and Stats -->
+            <div class="lg:col-span-1 space-y-6">
+                
+                <!-- Profile Card -->
+                <div id="profile-card" class="bg-[#21262d] p-4 rounded-lg border border-gray-600">
+                    <h2 class="text-xl font-semibold mb-3 text-blue-400">Commander Profile</h2>
+                    
+                    <!-- NEW: Name Input -->
+                    <div class="mb-3">
+                        <label for="commander-name-input" class="block text-sm font-medium text-gray-400 mb-1">Commander Name</label>
+                        <input type="text" id="commander-name-input" onchange="updatePlayerName(this.value)"
+                               class="w-full p-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+
+                    <div class="flex items-start space-x-4 mb-4">
+                        <div id="image-display-container">
+                            <svg id="default-icon" class="profile-img bg-gray-600 p-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                            </svg>
+                            <img id="profile-image" class="profile-img hidden" src="" alt="Profile Avatar">
+                        </div>
+                        
+                        <div id="profile-display" class="space-y-1 text-sm flex-1">
+                            <!-- Data will be rendered here -->
+                        </div>
+                    </div>
+
+                    <!-- Image Upload Input -->
+                    <div class="pt-3 border-t border-gray-700">
+                         <label for="image-input" class="block text-xs font-medium text-gray-400 mb-2">Upload/Change Profile Image</label>
+                         <input type="file" id="image-input" accept="image/*" onchange="handleImageUpload(event)"
+                                class="w-full text-xs text-gray-400 file:mr-2 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-gray-700 file:text-white hover:file:bg-gray-600">
+                    </div>
+                </div>
+
+                <!-- Profile Save/Load Controls -->
+                <div class="flex flex-col gap-3 bg-[#21262d] p-4 rounded-lg border border-gray-600">
+                    <h3 class="text-lg font-semibold text-yellow-400 mb-1">Data Management</h3>
+                    <button id="export-button" onclick="exportProfile()"
+                        class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition duration-200 shadow-md">
+                        ⬇️ Export Profile (Save Custom Data)
+                    </button>
+
+                    <button onclick="document.getElementById('file-input').click()"
+                        class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition duration-200 shadow-md">
+                        ⬆️ Import Profile (Load Custom Data)
+                    </button>
+                    <input type="file" id="file-input" accept=".json" style="display: none;" onchange="importProfile(event)">
+                </div>
+
+                 <!-- Status Message -->
+                <p id="status-message" class="text-center text-sm text-yellow-400"></p>
+            </div>
+
+
+            <!-- MIDDLE COLUMN: Country List and Selector -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- Custom Country Creator -->
+                <div class="bg-[#21262d] p-4 rounded-lg border border-gray-600">
+                    <h2 class="text-xl font-semibold mb-3 text-green-400">Create New Nation (Editable)</h2>
+                    <div class="space-y-3">
+                        <input type="text" id="country-name-input" placeholder="Nation Name (e.g., Atlantis)"
+                               class="w-full p-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:ring-green-500 focus:border-green-500">
+                        <input type="number" id="country-power-input" placeholder="Initial Power (e.g., 15.0)" step="0.1" value="10.0"
+                               class="w-full p-2 bg-gray-700 text-white rounded-lg border border-gray-600 focus:ring-green-500 focus:border-green-500">
+                        <button onclick="addCustomCountry()" class="w-full px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-lg transition duration-200">
+                            + Add Nation
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Country List & Selector -->
+                <div class="bg-[#21262d] p-4 rounded-lg border border-gray-600">
+                    <h2 class="text-xl font-semibold mb-4 text-white">Select Combatants (<span id="total-countries">0</span> Nations)</h2>
+                    
+                    <div class="flex gap-2 mb-3">
+                        <button onclick="setAllNationsActive(true)" class="flex-1 px-3 py-1 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-md"
+                                ${simulationInProgress ? 'disabled' : ''}>
+                            Select All
+                        </button>
+                        <button onclick="setAllNationsActive(false)" class="flex-1 px-3 py-1 text-sm bg-gray-600 hover:bg-gray-700 text-white rounded-lg shadow-md"
+                                ${simulationInProgress ? 'disabled' : ''}>
+                            Deselect All
+                        </button>
+                    </div>
+
+                    <div id="country-list" class="scrollable-list p-3 space-y-2 h-96">
+                        <!-- Countries will be rendered here -->
+                    </div>
+                </div>
+                
+            </div>
+
+            <!-- RIGHT COLUMN: Simulation Results and Battle Log -->
+            <div class="lg:col-span-1 space-y-6">
+                
+                <!-- Simulation Controls -->
+                <div class="space-y-3 bg-[#21262d] p-4 rounded-lg border border-gray-600">
+                    <h2 class="text-xl font-semibold mb-3 text-red-400">Simulation Controls</h2>
+                    
+                    <button onclick="advanceTurn()" id="advance-turn-btn" class="w-full px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition duration-200 shadow-xl transform hover:scale-[1.01]">
+                        ➡️ Advance Turn (Step-by-Step)
+                    </button>
+                    
+                    <button onclick="runFullSimulation()" id="run-full-simulation-btn" class="w-full px-4 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition duration-200 shadow-xl transform hover:scale-[1.01]">
+                        🔥 Run Full Simulation (Skip Mode)
+                    </button>
+                    <button onclick="resetSimulation()" id="reset-simulation-btn" class="w-full px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-lg transition duration-200">
+                        🔄 Reset Simulation
+                    </button>
+                </div>
+
+                <!-- Simulation Results -->
+                <div class="bg-[#21262d] p-4 rounded-lg border border-gray-600">
+                    <h2 class="text-xl font-semibold mb-3 text-red-400">Simulation Status</h2>
+                    <p class="text-gray-300">Active Nations: <span id="active-nations-count">0</span></p>
+                    <p class="text-gray-300">Turns Remaining: <span id="turns-remaining">100</span></p>
+                    <p class="mt-2 text-lg font-bold text-yellow-500">Winner: <span id="simulation-winner">N/A</span></p>
+                </div>
+
+                <!-- Battle Log -->
+                <div class="bg-[#21262d] p-4 rounded-lg border border-gray-600">
+                    <h2 class="text-xl font-semibold mb-3 text-red-400">Battle Log</h2>
+                    <div id="battle-log" class="scrollable-list battle-log-height p-3 h-96 space-y-1 text-xs text-gray-400">
+                        <p class="text-center italic text-gray-500">Log will appear here after a simulation run.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Core Game Data ---
+        // Massive list of nations from user request, pre-processed with unique IDs and varied default power levels.
+        const rawCountryList = [
+            "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan", "Bahamas, The", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cabo Verde", "Cambodia", "Cameroon", "Canada", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Congo, Democratic Republic of the (DRC)", "Congo, Republic of the", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czechia", "Denmark", "Djibouti", "Dominica", "Dominican Republic", "East Timor (Timor-Leste)", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia", "Fiji", "Finland", "France", "Gabon", "Gambia, The", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Holy See (Vatican City)", "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy", "Ivory Coast (Côte d’Ivoire)", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kiribati", "Korea, North (DPRK)", "Korea, South (ROK)", "Kosovo (Partially recognized)", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia, Federated States of", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar (Burma)", "Namibia", "Nauru", "Nepal", "Netherlands, The", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Macedonia", "Norway", "Oman", "Pakistan", "Palau", "Palestine, State of (Observer State)", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal", "Qatar", "Romania", "Russia", "Rwanda", "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands, The", "Somalia", "South Africa", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria", "Tajikistan", "Tanzania", "Thailand", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates, The", "United Kingdom, The", "United States, The", "Uruguay", "Uzbekistan", "Vanuatu", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe",
+            "Abyssinia", "Anglo-Corsican Kingdom", "Ankole", "Austrian Empire", "Austria-Hungary", "Basutoland", "Bengal (Kingdom)", "Biafra", "British Raj", "Burma (Pre-1989 name change)", "Byzantine Empire", "Ceylon", "Champa", "Congo Free State, The", "Confederate States of America", "Corsica (Independent Republic)", "Czechoslovakia", "Dahomey (Republic of)", "East Germany (German Democratic Republic)", "East Pakistan", "Gran Colombia", "Hawaiian Kingdom", "Khmer Republic", "Kingdom of Hawaii", "Kingdom of Sikkim", "Mamluk Sultanate", "Muscat and Oman", "Neutral Moresnet", "Newfoundland (Dominion of)", "North German Confederation", "North Yemen", "Orange Free State", "Ottoman Empire", "Papal States", "Persia", "Prussia", "Rhodesia", "Roman Empire (Western and Eastern)", "Siam", "Sikkim", "South Vietnam", "South Yemen", "Southwest Africa", "Soviet Union (USSR)", "Tanganyika", "Texas, Republic of", "Tibet (1912-1951)", "Transjordan", "United Arab Republic", "Vermont (Republic of)", "West Florida (Republic of)", "West Germany (Federal Republic of Germany)", "Western Samoa (Pre-1997 name change)", "Yugoslavia", "Zaire", "Zanzibar",
+            "Abuddin (Tyrant)", "Absurdistan (Various)", "Agrabah (Aladdin)", "Aldovia (A Christmas Prince)", "Amestris (Fullmetal Alchemist)", "Analand (Fantasy)", "Angria (Brontë Juvenilia)", "Ankh-Morpork (Discworld)", "Aquilonia (Conan the Barbarian)", "Archenland (Narnia)", "Arendelle, Kingdom of (Frozen)", "Arstotzka (Papers, Please)", "Atlantis (Mythology/DC Comics)", "Atropia (Military Exercise)", "Avalon (Arthurian Legend)", "Averna (Sweet Danger)", "Babar's Kingdom (Babar the Elephant)", "Balnibarbi (Gulliver's Travels)", "Bangalla (The Phantom)", "Belgravia (The Princess Switch)", "Belka (Ace Combat)", "Blefuscu (Gulliver's Travels)", "Bone March (Dungeons & Dragons)", "Borduria (The Adventures of Tintin)", "Brobdingnag (Gulliver's Travels)", "Brutopia (Disney Comics)", "Buranda (Yes Minister)", "Calormen (Narnia)", "Candyland (Children's Media)", "Carbombya (The Transformers)", "Chernarus (ArmA 2 / DayZ)", "Cloud Cuckoo Land (Aristophanes)", "Costaguana (Nostromo)", "Corona, Kingdom of (Tangled)", "Drenai Empire (David Gemmell)", "Eastasia (Nineteen Eighty-Four)", "Elbonia (Dilbert)", "El Dorado (Voltaire's Candide)", "Emmeria (Ace Combat)", "Equatorial Kundu (The West Wing)", "Erewhon (Samuel Butler)", "Erusea (Ace Combat)", "Eurasia (Nineteen Eighty-Four)", "Estovakia (Ace Combat)", "Florin (The Princess Bride)", "Fontaine (Genshin Impact)", "Freedonia (Duck Soup)", "Gavel (Ghost in the Shell)", "Genosha (Marvel Comics)", "Genovia (The Princess Diaries)", "Gilead, Republic of (The Handmaid's Tale)", "Glubbdubdrib (Gulliver's Travels)", "Gondal (Brontë Juvenilia)", "Gondor (The Lord of the Rings - Kingdom, not nation-state)", "Grand Fenwick, Duchy of (The Mouse That Roared)", "Graustark (Graustark Series)", "Grinlandia (Alexander Grin novels)", "Groland (French TV Satire)", "Guravia (Astro Boy)", "Herland (Charlotte Perkins Gilman)", "Herzoslovakia (Agatha Christie)", "Ishmaelia (Scoop)", "Kakania (Austrian Literature)", "Kamistan (24)", "Kekistan (Internet Meme)", "Kirikirijin (Kirikirijin)", "Kolechia (Papers, Please)", "Laputa (Gulliver's Travels)", "Latveria (Marvel Comics)", "Laurania (Savrola)", "Libertatia (Mythical Pirate City)", "Lilliput (Gulliver's Travels)", "Loompaland (Charlie and the Chocolate Factory)", "Lower Slobbovia (Li'l Abner)", "Luggnagg (Gulliver's Travels)", "Madripoor (Marvel Comics)", "Maldonia (The Princess and the Frog)", "Marnsburg (Generic Kingdom)", "McDonaldland (McDonald's Marketing)", "Molvanîa (Satirical Travel Guide)", "Mondstadt (Genshin Impact)", "Mypos (Perfect Strangers)", "Nambutu (Casino Royale)", "Narnia (The Chronicles of Narnia)", "Natlan (Genshin Impact)", "New California Republic (Fallout)", "Nyrond (Dungeons & Dragons)", "Oceania (Nineteen Eighty-Four)", "Osea (Ace Combat)", "Paflagonia (The Rose and the Ring)", "Panem (The Hunger Games)", "Petoria (Family Guy)", "Pokolistan (DC Comics)", "Pullamawang (Generic Asian Country)", "Qumranistan (Yes Minister)", "Qurac (DC Comics)", "Ruritania (The Prisoner of Zenda)", "Saint Marie (Death in Paradise)", "San Lorenzo (Cat's Cradle)", "San Marcos (Woody Allen's Bananas)", "San Sombrèro (Satirical Travel Guide)", "San Serriffe (The Guardian Joke)", "Shangri-La (Lost Horizon)", "Sokovia (Marvel Cinematic Universe)", "Spensonia (Utopian Commonwealth)", "Suari (Fictional South American)", "Syldavia (The Adventures of Tintin)", "Themyscira (DC Comics)", "Tomania (The Great Dictator)", "Val Verde (Various Action Films)", "Wakanda (Black Panther)", "Xanth (Xanth Series)", "Xylvania (Advance Wars: Dual Strike)", "Yuktobania (Ace Combat)", "Zamunda (Coming to America)", "Zembla (Pale Fire)", "Zubrowka, Republic of (The Grand Budapest Hotel)", "Nazi America"
+        ];
+        
+        // Helper function to process raw list into structured data with varied power levels
+        function generateInitialCountryData(list) {
+            let data = [];
+            list.forEach((name, index) => {
+                let basePower = 5.0 + (Math.random() * 7); // Base power 5.0 to 12.0
+                
+                // Adjust for notable names/types
+                if (["United States, The", "China", "Russia", "Soviet Union (USSR)", "Roman Empire (Western and Eastern)", "Ottoman Empire"].includes(name)) {
+                    basePower = 15 + (Math.random() * 5); // 15-20 power
+                } else if (["Wakanda", "Latveria", "Oceania", "Eastasia", "Eurasia", "Nazi America"].includes(name)) {
+                    basePower = 18 + (Math.random() * 7); // Fictional/OP power 18-25
+                } else if (name.length < 10) {
+                     basePower -= 2; // Slightly lower for smaller/simpler names
+                }
+
+                data.push({
+                    id: index + 1,
+                    name: name,
+                    power: Math.max(0.1, basePower), // Ensure power is not negative
+                    isEditable: false,
+                    isActive: true
+                });
+            });
+            return data;
+        }
+
+        let initialCountryData = generateInitialCountryData(rawCountryList);
+        
+        let allCountries = [];
+        const MAX_TURNS = 100;
+        let simulationInProgress = false;
+
+        // --- Game State (Only the profile part is saved/loaded) ---
+        let gameProfile = {
+            playerName: "New Commander",
+            profileImageBase64: null,
+            conquestScore: 0,
+            currentTurn: 0,
+            editableCountries: [], 
+            lastPlayed: new Date().toLocaleString(),
+            version: '4.1'
+        };
+
+        // --- DOM Elements ---
+        const profileDisplay = document.getElementById('profile-display');
+        const statusMessage = document.getElementById('status-message');
+        const profileImage = document.getElementById('profile-image');
+        const defaultIcon = document.getElementById('default-icon');
+        const countryListElement = document.getElementById('country-list');
+        const totalCountriesElement = document.getElementById('total-countries');
+        const battleLogElement = document.getElementById('battle-log');
+        const activeNationsCountElement = document.getElementById('active-nations-count');
+        const turnsRemainingElement = document.getElementById('turns-remaining');
+        const simulationWinnerElement = document.getElementById('simulation-winner');
+        const advanceTurnBtn = document.getElementById('advance-turn-btn');
+        const runFullSimulationBtn = document.getElementById('run-full-simulation-btn');
+
+        // --- Core Functions ---
+
+        /** Initializes the allCountries array by combining fixed nations (reset to initial power) and custom nations. */
+        function initializeAllCountries() {
+            // Rebuild the fixed list using the original template
+            const fixedCountries = initialCountryData.map(c => ({...c, isActive: true}));
+            
+            // Player-created nations (loaded from profile, preserves saved isActive status)
+            const customCountries = gameProfile.editableCountries.map(c => ({
+                 ...c,
+                 isEditable: true, 
+                 isActive: c.isActive === undefined ? true : c.isActive // Ensure isActive is present
+            }));
+
+            allCountries = [...fixedCountries, ...customCountries];
+        }
+
+        /** Renders the entire UI based on current gameProfile and allCountries state. */
+        function updateUI() {
+            const commanderNameInput = document.getElementById('commander-name-input');
+            if (commanderNameInput) {
+                // Update input field to show current name
+                commanderNameInput.value = gameProfile.playerName;
+            }
+            
+            // 1. Update Profile Text Data
+            profileDisplay.innerHTML = `
+                <p><strong class="text-white">Commander:</strong> ${gameProfile.playerName}</p>
+                <p><strong class="text-white">Score:</strong> ${gameProfile.conquestScore}</p>
+                <p><strong class="text-white">Turn:</strong> ${gameProfile.currentTurn}</p>
+                <p class="text-xs text-gray-500 mt-1">Last Save: ${gameProfile.lastPlayed}</p>
+            `;
+            
+            // 2. Update Image Display (PFP)
+            if (gameProfile.profileImageBase64) {
+                profileImage.src = gameProfile.profileImageBase64;
+                profileImage.classList.remove('hidden');
+                defaultIcon.classList.add('hidden');
+            } else {
+                profileImage.classList.add('hidden');
+                profileImage.src = '';
+                defaultIcon.classList.remove('hidden');
+            }
+            
+            // 3. Render Countries and update stats
+            renderCountries();
+            updateSimulationStats();
+            updateControlButtons();
+        }
+        
+        /** Updates the player's name and refreshes UI. */
+        function updatePlayerName(newName) {
+            const trimmedName = newName.trim() || "Nameless Commander";
+            if (trimmedName !== gameProfile.playerName) {
+                gameProfile.playerName = trimmedName;
+                updateUI();
+                statusMessage.textContent = `Commander name changed to '${gameProfile.playerName}'.`;
+            }
+        }
+
+        /** Renders the list of all nations with activation toggles. */
+        function renderCountries() {
+            const activeCount = allCountries.filter(c => c.isActive).length;
+            totalCountriesElement.textContent = allCountries.length;
+            activeNationsCountElement.textContent = activeCount;
+            
+            countryListElement.innerHTML = allCountries.map(country => `
+                <div class="flex justify-between items-center p-2 rounded-md shadow-sm border ${country.isActive ? 'bg-gray-700 border-green-500' : 'bg-gray-800 border-gray-600 opacity-60'}">
+                    <span class="font-medium ${country.isEditable ? 'text-green-300' : 'text-gray-200'} flex-1 truncate">
+                        ${country.name} (${country.power.toFixed(1)})
+                        ${country.isEditable ? '<span class="text-xs ml-1 bg-green-900 px-2 rounded-full">Custom</span>' : ''}
+                    </span>
+                    <button 
+                        onclick="toggleCountryActive(${country.id})"
+                        class="ml-3 w-16 px-2 py-0.5 text-xs font-semibold rounded-full transition duration-150 ${country.isActive ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'}"
+                        ${simulationInProgress ? 'disabled' : ''}
+                    >
+                        ${country.isActive ? 'Active' : 'Deactive'}
+                    </button>
+                </div>
+            `).join('');
+        }
+        
+        /** Updates the simulation winner and turns remaining status. */
+        function updateSimulationStats() {
+            const activeNations = allCountries.filter(c => c.isActive);
+            turnsRemainingElement.textContent = Math.max(0, MAX_TURNS - gameProfile.currentTurn);
+            
+            if (activeNations.length === 1) {
+                simulationWinnerElement.textContent = activeNations[0].name;
+                simulationWinnerElement.className = 'mt-2 text-lg font-bold text-green-500';
+                simulationInProgress = false;
+            } else if (activeNations.length === 0) {
+                 simulationWinnerElement.textContent = "Draw/Annihilation";
+                 simulationWinnerElement.className = 'mt-2 text-lg font-bold text-red-500';
+                 simulationInProgress = false;
+            } else if (gameProfile.currentTurn >= MAX_TURNS) {
+                 simulationWinnerElement.textContent = "Time Limit Reached";
+                 simulationWinnerElement.className = 'mt-2 text-lg font-bold text-yellow-500';
+                 simulationInProgress = false;
+            } else {
+                simulationWinnerElement.textContent = "Ongoing...";
+                simulationWinnerElement.className = 'mt-2 text-lg font-bold text-yellow-500';
+            }
+        }
+        
+        /** Toggles the isActive status of a nation. */
+        function toggleCountryActive(id) {
+            const index = allCountries.findIndex(c => c.id === id); 
+            
+            if (index !== -1 && !simulationInProgress) {
+                allCountries[index].isActive = !allCountries[index].isActive;
+                renderCountries();
+                updateSimulationStats();
+            }
+        }
+        
+        /** Sets all countries active or deactive. */
+        function setAllNationsActive(state) {
+            if (simulationInProgress) return;
+            allCountries.forEach(c => c.isActive = state);
+            renderCountries();
+            updateSimulationStats();
+        }
+        
+        /** Updates button states based on simulation status. */
+        function updateControlButtons() {
+            const activeCount = allCountries.filter(c => c.isActive).length;
+            const isSimulationReady = activeCount >= 2;
+            const isFinished = activeCount <= 1 || gameProfile.currentTurn >= MAX_TURNS;
+
+            if (simulationInProgress && !isFinished) {
+                runFullSimulationBtn.disabled = true;
+                advanceTurnBtn.disabled = false;
+                advanceTurnBtn.classList.add('animate-pulse');
+            } else {
+                runFullSimulationBtn.disabled = !isSimulationReady || isFinished;
+                advanceTurnBtn.disabled = !isSimulationReady || isFinished;
+                advanceTurnBtn.classList.remove('animate-pulse');
+                
+                // If finished, ensure button styles are correct even if simulationInProgress was false
+                if (isFinished) {
+                    advanceTurnBtn.disabled = true;
+                    runFullSimulationBtn.disabled = true;
+                }
+            }
+        }
+
+        // --- Simulation Logic ---
+
+        /** Runs a single turn of the simulation (core logic for both modes). */
+        function simulateTurn() {
+            let activeNations = allCountries.filter(c => c.isActive);
+            
+            if (activeNations.length <= 1 || gameProfile.currentTurn >= MAX_TURNS) {
+                return false; // Simulation over
+            }
+            
+            gameProfile.currentTurn++;
+
+            // 1. Identify strongest and weakest nations (or a randomized attack pair)
+            activeNations.sort((a, b) => b.power - a.power);
+            
+            // Randomly select one attacker from the top 50% and one defender from the bottom 50%
+            const halfway = Math.ceil(activeNations.length / 2);
+            const attackerPool = activeNations.slice(0, halfway);
+            const defenderPool = activeNations.slice(halfway);
+
+            let attacker = attackerPool[Math.floor(Math.random() * attackerPool.length)];
+            let defender = defenderPool[Math.floor(Math.random() * defenderPool.length)];
+
+            // Fallback for small number of nations
+            if (!defender) {
+                defender = activeNations[activeNations.length - 1];
+            }
+            if (attacker.id === defender.id) {
+                attacker = activeNations[0]; 
+                defender = activeNations[activeNations.length - 1];
+                if (attacker.id === defender.id) return false;
+            }
+            
+            // 2. Battle calculation
+            const powerDifference = attacker.power - defender.power;
+            let logMessage = `Turn ${gameProfile.currentTurn}: ${attacker.name} (${attacker.power.toFixed(1)}) attacks ${defender.name} (${defender.power.toFixed(1)}). `;
+            
+            if (powerDifference > defender.power * 0.2) {
+                // Attacker wins and absorbs 50% of the defender's power
+                const absorbedPower = defender.power * 0.5;
+                attacker.power += absorbedPower;
+                defender.isActive = false; // Defender is eliminated
+                gameProfile.conquestScore += 10;
+                logMessage += `<span class="text-green-400">VICTORY. ${defender.name} is eliminated.</span> ${attacker.name} power +${absorbedPower.toFixed(2)}.`;
+            } else if (powerDifference < 0) {
+                 // Defender is stronger, attacker takes slight damage/setback
+                 const damage = Math.abs(powerDifference) * 0.1;
+                 attacker.power = Math.max(0.1, attacker.power - damage);
+                 logMessage += `<span class="text-yellow-400">STALEMATE. ${attacker.name} takes minor losses (${damage.toFixed(2)}).</span>`;
+            } else {
+                // Minor gain for attacker
+                const gain = powerDifference * 0.1;
+                attacker.power += gain;
+                logMessage += `<span class="text-gray-400">BATTLE. ${attacker.name} gains slight advantage (${gain.toFixed(2)}).</span>`;
+            }
+            
+            // 3. Log the result
+            addLog(logMessage);
+            
+            // 4. Check for end condition
+            return allCountries.filter(c => c.isActive).length > 1 && gameProfile.currentTurn < MAX_TURNS;
+        }
+        
+        /** Resets the simulation to the initial state. */
+        function resetSimulation() {
+            simulationInProgress = false;
+            gameProfile.currentTurn = 0;
+            battleLogElement.innerHTML = '<p class="text-center italic text-gray-500">Log will appear here after a simulation run.</p>';
+            initializeAllCountries(); 
+            updateUI();
+            statusMessage.textContent = 'Simulation has been reset. Select your combatants and start the war!';
+        }
+
+        /** Advances the simulation by one turn (Step-by-Step Mode). */
+        function advanceTurn() {
+            // Check if game is already over
+            if (allCountries.filter(c => c.isActive).length <= 1 || gameProfile.currentTurn >= MAX_TURNS) {
+                simulationInProgress = false; // Ensure status is correct
+                updateUI();
+                statusMessage.textContent = "Simulation is already finished. Please reset to start a new game.";
+                return;
+            }
+
+            if (gameProfile.currentTurn === 0) {
+                 // First turn setup
+                simulationInProgress = true;
+                battleLogElement.innerHTML = ''; // Clear log on first turn
+                addLog(`<span class="text-yellow-500 font-bold">--- SIMULATION STARTED ---</span>`);
+            }
+
+            const keepRunning = simulateTurn();
+            updateUI();
+
+            if (!keepRunning) {
+                simulationInProgress = false;
+                addLog(`<span class="text-yellow-500 font-bold">--- SIMULATION ENDED ---</span>`);
+                updateUI();
+            }
+        }
+
+
+        /** Runs the simulation from start to finish instantly (Skip Mode). */
+        function runFullSimulation() {
+            // Setup for a new run
+            resetSimulation(); 
+            simulationInProgress = true;
+
+            if (allCountries.filter(c => c.isActive).length < 2) {
+                addLog('<span class="text-red-500">Error: Not enough active nations (need 2+) to start a simulation.</span>');
+                simulationInProgress = false;
+                updateUI();
+                return;
+            }
+
+            addLog(`<span class="text-yellow-500 font-bold">--- SIMULATION START: ${allCountries.filter(c => c.isActive).length} Nations Enter the Fray ---</span>`);
+
+            let keepRunning = true;
+            // Run turns until condition is met or max turns reached
+            while (keepRunning) {
+                keepRunning = simulateTurn();
+            }
+
+            // Final Update
+            updateUI();
+            addLog(`<span class="text-yellow-500 font-bold">--- SIMULATION ENDED ---</span>`);
+        }
+
+        /** Adds a message to the battle log. */
+        function addLog(message) {
+            const logEntry = document.createElement('p');
+            logEntry.innerHTML = message;
+            battleLogElement.prepend(logEntry); // Add to the top
+            // Keep the log length manageable
+            while (battleLogElement.children.length > 500) {
+                battleLogElement.removeChild(battleLogElement.lastChild);
+            }
+        }
+        
+        // --- Custom Country Logic ---
+        
+        function addCustomCountry() {
+            if (simulationInProgress) {
+                statusMessage.textContent = "Error: Cannot add nations during an active simulation.";
+                return;
+            }
+            const nameInput = document.getElementById('country-name-input');
+            const powerInput = document.getElementById('country-power-input');
+            
+            const name = nameInput.value.trim();
+            const power = parseFloat(powerInput.value);
+            
+            if (name === "" || isNaN(power) || power <= 0) {
+                statusMessage.textContent = "Error: Please enter a valid name and positive power value.";
+                return;
+            }
+            
+            const newCountry = {
+                id: Date.now(), // Unique ID (will be stored as number)
+                name: name,
+                power: power,
+                isEditable: true,
+                isActive: true 
+            };
+            
+            gameProfile.editableCountries.push(newCountry);
+            initializeAllCountries(); 
+            
+            nameInput.value = '';
+            powerInput.value = '10.0';
+            
+            updateUI();
+            statusMessage.textContent = `Custom nation '${name}' created and added to your profile! Export to save it permanently.`;
+        }
+
+        // --- Image Handling Logic (PFP) ---
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (file.size > 1024 * 1024 * 5) {
+                statusMessage.textContent = "Error: Image file size must be under 5MB.";
+                event.target.value = null;
+                return;
+            }
+
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                gameProfile.profileImageBase64 = e.target.result;
+                updateUI();
+                statusMessage.textContent = `Image successfully added to the profile! Export to save it.`;
+            };
+
+            reader.onerror = function() {
+                statusMessage.textContent = "Error reading image file.";
+            }
+
+            reader.readAsDataURL(file); 
+        }
+
+        // --- Export (Download) Logic ---
+        function exportProfile() {
+            try {
+                // Update editable countries from the master list before export
+                gameProfile.editableCountries = allCountries.filter(c => c.isEditable).map(c => ({
+                    id: c.id,
+                    name: c.name,
+                    power: c.power,
+                    isEditable: true,
+                    isActive: c.isActive 
+                }));
+
+                const exportData = {
+                    playerName: gameProfile.playerName,
+                    profileImageBase64: gameProfile.profileImageBase64,
+                    conquestScore: gameProfile.conquestScore,
+                    currentTurn: gameProfile.currentTurn,
+                    editableCountries: gameProfile.editableCountries,
+                    lastPlayed: new Date().toLocaleString(),
+                    version: gameProfile.version
+                };
+
+                const profileJSON = JSON.stringify(exportData, null, 2);
+                const blob = new Blob([profileJSON], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${gameProfile.playerName.replace(/\s/g, '_')}_conquest_profile.json`;
+                
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                statusMessage.textContent = `Profile for ${gameProfile.playerName} successfully exported!`;
+
+            } catch (error) {
+                console.error("Export failed:", error);
+                statusMessage.textContent = "Error: Failed to export profile data.";
+            }
+        }
+
+        // --- Import (Upload) Logic ---
+        function importProfile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    const loadedData = JSON.parse(e.target.result);
+                    
+                    if (loadedData.playerName && Array.isArray(loadedData.editableCountries)) {
+                        
+                        gameProfile.playerName = loadedData.playerName;
+                        gameProfile.profileImageBase64 = loadedData.profileImageBase64 || null;
+                        gameProfile.conquestScore = loadedData.conquestScore || 0;
+                        gameProfile.currentTurn = loadedData.currentTurn || 0;
+                        
+                        // Load editable countries, ensuring they are marked as editable
+                        gameProfile.editableCountries = loadedData.editableCountries.map(c => ({
+                            ...c, 
+                            isEditable: true, 
+                            isActive: c.isActive === undefined ? true : c.isActive 
+                        }));
+                        gameProfile.lastPlayed = new Date().toLocaleString();
+
+                        resetSimulation(); // Reset simulation state after loading
+                        statusMessage.textContent = `Profile for ${gameProfile.playerName} loaded successfully! Your custom nations are now active.`;
+                    } else {
+                        statusMessage.textContent = "Error: The selected file is not a valid conquest profile (missing core data).";
+                    }
+                } catch (error) {
+                    console.error("Import failed:", error);
+                    statusMessage.textContent = "Error: Failed to read or parse the profile file. Is it a valid JSON?";
+                }
+            };
+            
+            reader.readAsText(file);
+            event.target.value = null; // Clear the file input
+        }
+
+        // Initial setup on window load
+        window.onload = () => {
+             initializeAllCountries();
+             updateUI();
+             addLog("Welcome to Global Conquest! Select your combatants and press 'Advance Turn' or 'Run Full Simulation' to start the war.");
+        };
+    </script>
+</body>
+</html>
